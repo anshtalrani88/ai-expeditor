@@ -1,0 +1,117 @@
+{
+  "name": "Technical Query Forwarder",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "technical-query-webhook",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        800,
+        400
+      ],
+      "webhookId": "{{ $workflow.id }}"
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8000/evaluate-po/{{ $json.body.po_number }}",
+        "method": "POST",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email_content",
+              "value": "={{ $json.body.email_body }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Evaluate Email Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.body.actions_triggered[0].action }}",
+              "operation": "contains",
+              "value2": "forward_to_engineer"
+            }
+          ]
+        }
+      },
+      "name": "Check for Forward Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "=Fwd: Technical Query for PO {{ $json.body.po_number }}",
+        "body": "=Original message:\n\n{{ $json.body.email_body }}",
+        "to": "={{ $json.body.actions_triggered[0].recipient }}"
+      },
+      "name": "Forward Email",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        400
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "Z8n1tBwMEvXwG1sB",
+          "name": "Microsoft Outlook Credential"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Email Content": {
+      "main": [
+        [
+          {
+            "node": "Check for Forward Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Forward Action": {
+      "main": [
+        [
+          {
+            "node": "Forward Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

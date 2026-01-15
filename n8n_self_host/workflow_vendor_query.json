@@ -1,0 +1,115 @@
+{
+  "name": "Vendor Query Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "vendor-query-webhook",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8000/evaluate-po/{{ $json.body.po_number }}",
+        "method": "POST",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email_content",
+              "value": "={{ $json.body.email_body }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Evaluate Email Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.body.actions_triggered[0].action }}",
+              "operation": "equal",
+              "value2": "send_smart_reply"
+            }
+          ]
+        }
+      },
+      "name": "Check for Smart Reply Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "=Re: {{ $node[\"Webhook Trigger\"].json.body.subject }}",
+        "body": "={{ $json.body.actions_triggered[0].details }}",
+        "to": "={{ $node[\"Webhook Trigger\"].json.body.from_email }}"
+      },
+      "name": "Send Smart Reply",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        400
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "pTL9yZjiWcaGpVA9"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Email Content": {
+      "main": [
+        [
+          {
+            "node": "Check for Smart Reply Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Smart Reply Action": {
+      "main": [
+        [
+          {
+            "node": "Send Smart Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

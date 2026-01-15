@@ -1,0 +1,140 @@
+{
+  "name": "Daily Purchasing Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": {
+                "unit": "days",
+                "value": 1
+              }
+            }
+          ]
+        }
+      },
+      "name": "Daily Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/purchase_orders/",
+        "options": {}
+      },
+      "name": "Get All POs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8000/evaluate-po/{{ $json.po_number }}",
+        "method": "POST",
+        "sendBody": false,
+        "options": {}
+      },
+      "name": "Evaluate PO for Actions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.body.actions_triggered.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Check if Action is Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "={{ $json.body.actions_triggered[0].action === 'send_reminder' ? 'Reminder: PO Acknowledgment for ' + $json.body.po_number : 'Inquiry: Delivery Status for ' + $json.body.po_number }}",
+        "body": "={{ $json.body.actions_triggered[0].details }}",
+        "to": "={{ $json.body.actions_triggered[0].recipient }}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        400
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "pTL9yZjiWcaGpVA9"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get All POs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All POs": {
+      "main": [
+        [
+          {
+            "node": "Evaluate PO for Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate PO for Actions": {
+      "main": [
+        [
+          {
+            "node": "Check if Action is Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Action is Needed": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

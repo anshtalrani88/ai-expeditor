@@ -1,0 +1,27 @@
+services:
+  n8n:
+    image: n8nio/n8n:1.39.1
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      # Force the webhook URL to ensure it's registered correctly
+      - N8N_WEBHOOK_TUNNEL_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=UTC
+      # Enables API token authentication
+      - N8N_TOKEN_AUTHENTICATION_ACTIVE=false
+      # Disables user management, creating a single default user
+      - N8N_USER_MANAGEMENT_DISABLED=false
+      # Optional: Basic Auth for the editor UI
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:

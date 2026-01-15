@@ -1,0 +1,17 @@
+SQLAlchemy
+pydantic
+python-dotenv
+python-magic
+pypdf
+python-docx
+resend
+requests
+openai==2.14.0
+huggingface-hub
+fastapi
+uvicorn==0.23.2
+gspread
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+reportlab

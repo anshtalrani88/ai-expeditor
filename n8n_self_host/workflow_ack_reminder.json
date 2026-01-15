@@ -1,0 +1,163 @@
+{
+  "name": "PO Acknowledgment Reminder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": {
+                "unit": "days",
+                "value": 1
+              }
+            }
+          ]
+        }
+      },
+      "name": "Daily Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/purchase_orders/",
+        "options": {}
+      },
+      "name": "Get All POs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const items = $json.body;\nlet processedItems = [];\n\nfor (const item of items) {\n    // Only process POs that are in a state that might require a reminder\n    if (item.status === 'Issued' || item.status === 'Awaiting Acknowledgment') {\n        processedItems.push({ json: item });\n    }\n}\n\nreturn processedItems;"
+      },
+      "name": "Filter Relevant POs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8000/evaluate-po/{{ $json.po_number }}",
+        "method": "POST",
+        "options": {}
+      },
+      "name": "Evaluate PO for Actions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.body.actions_triggered[0].action }}",
+              "operation": "contains",
+              "value2": "send_reminder"
+            }
+          ]
+        }
+      },
+      "name": "Check for Reminder Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "=Reminder: PO Acknowledgment for {{ $json.body.po_number }}",
+        "body": "={{ $json.body.actions_triggered[0].details }}",
+        "to": "={{ $json.body.actions_triggered[0].recipient }}"
+      },
+      "name": "Send Reminder Email",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        400
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "Z8n1tBwMEvXwG1sB",
+          "name": "Microsoft Outlook Credential"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get All POs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All POs": {
+      "main": [
+        [
+          {
+            "node": "Filter Relevant POs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Relevant POs": {
+      "main": [
+        [
+          {
+            "node": "Evaluate PO for Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate PO for Actions": {
+      "main": [
+        [
+          {
+            "node": "Check for Reminder Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Reminder Action": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

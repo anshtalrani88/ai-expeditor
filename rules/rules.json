@@ -1,0 +1,92 @@
+{
+  "rules": [
+    {
+      "name": "Credit Hold: escalate to finance and mark hold",
+      "when": {
+        "from_role": ["supplier"],
+        "intent_in": ["credit_hold"]
+      },
+      "then": [
+        {"action": "send_email", "to": "finance", "scenario": "credit_hold_alert"},
+        {"action": "update_status", "value": "PAYMENT_HOLD"}
+      ]
+    },
+    {
+      "name": "Missing delivery date → ask buyer",
+      "when": {
+        "status_in": ["ISSUED", "AWAITING_ACKNOWLEDGMENT"],
+        "delivery_date_missing": true
+      },
+      "then": [
+        {"action": "send_email", "to": "buyer", "scenario": "missing_delivery_date_request"},
+        {"action": "update_status", "value": "NEEDS_INFO"}
+      ]
+    },
+    {
+      "name": "Acknowledgment reminder after 24h from issuance",
+      "when": {
+        "status_in": ["ISSUED", "AWAITING_ACKNOWLEDGMENT"],
+        "sla_hours_over": 24
+      },
+      "then": [
+        {"action": "send_email", "to": "supplier", "scenario": "new_po_notification"},
+        {"action": "update_status", "value": "AWAITING_ACKNOWLEDGMENT"}
+      ]
+    },
+    {
+      "name": "Lapsed delivery follow-up",
+      "when": {
+        "from_role": ["system"],
+        "status_not_in": ["DELIVERED", "CLOSED"],
+        "delivery_date_past": true
+      },
+      "then": [
+        {"action": "send_email", "to": "supplier", "scenario": "delivery_delay_followup"},
+        {"action": "update_status", "value": "OVERDUE"}
+      ]
+    },
+    {
+      "name": "Supplier confirms delivery completed  mark delivered",
+      "when": {
+        "from_role": ["supplier"],
+        "intent_in": ["delivery_completed"]
+      },
+      "then": [
+        {"action": "update_status", "value": "DELIVERED"}
+      ]
+    },
+    {
+      "name": "Vendor partial availability  notify buyer",
+      "when": {
+        "from_role": ["supplier"],
+        "intent_in": ["partial_availability"]
+      },
+      "then": [
+        {"action": "send_email", "to": "buyer", "scenario": "partial_quantity_confirmation"},
+        {"action": "update_status", "value": "PARTIAL_AVAILABILITY"}
+      ]
+    },
+    {
+      "name": "No supplier response after outbound → follow up",
+      "when": {
+        "from_role": ["system"],
+        "status_not_in": ["DELIVERED", "CLOSED", "COMPLETED", "CANCELLED"],
+        "supplier_silent_over_seconds_over": 300,
+        "last_outbound_to_supplier_is_no_response_followup": false
+      },
+      "then": [
+        {"action": "send_email", "to": "supplier", "scenario": "vendor_no_response_followup"}
+      ]
+    },
+    {
+      "name": "Technical query forward to engineering",
+      "when": {
+        "from_role": ["supplier"],
+        "intent_in": ["technical_query"]
+      },
+      "then": [
+        {"action": "send_email", "to": "engineering", "scenario": "technical_query_forward"}
+      ]
+    }
+  ]
+}
