@@ -8,6 +8,7 @@ from g_sheets.sheets_handler import (
     setup_spreadsheet,
     get_purchase_order as sheets_get_po,
     update_po_status as sheets_update_status,
+    update_po_flag,
     get_sheets_client,
     SHEET_NAME,
     _with_backoff,
@@ -48,6 +49,7 @@ def _ensure_threads_ws(client: gspread.Client) -> gspread.Worksheet:
             "Subject",
             "Body",
             "Labels",
+            "Message-ID",
         ]
         _with_backoff(ws.append_row, header)
 
@@ -100,12 +102,13 @@ def _load_threads(po_number: str) -> List[Dict[str, Any]]:
                 "subject": row[5],
                 "body": row[6],
                 "labels": row[7].split(",") if len(row) > 7 and row[7] else [],
+                "message_id": row[8] if len(row) > 8 else None,
             })
     return results
 
 
 def append_thread(po_number: str, direction: str, from_addr: str, to_addr: str,
-                  subject: str, body: str, labels: Optional[List[str]] = None) -> None:
+                  subject: str, body: str, labels: Optional[List[str]] = None, message_id: Optional[str] = None) -> None:
     global _THREADS_CACHE_ROWS
     global _THREADS_CACHE_TS
     global _THREADS_WS_CACHE
@@ -134,6 +137,7 @@ def append_thread(po_number: str, direction: str, from_addr: str, to_addr: str,
         subject or "",
         trimmed_body,
         ",".join(labels or []),
+        message_id or "",
     ])
 
     _THREADS_CACHE_ROWS = None
@@ -164,12 +168,24 @@ def get_po_state(po_number: str) -> Optional[Dict[str, Any]]:
         "line_items": po.line_items,
         "original_sender": po.original_sender,
         "threads": _load_threads(po.po_number),
+        "mtc_needed": po.mtc_needed,
+        "mtc_received": po.mtc_received,
+        "payment_hold": po.payment_hold,
+        "needs_info": po.needs_info,
+        "awaiting_acknowledgment": po.awaiting_acknowledgment,
+        "overdue": po.overdue,
+        "partial_availability": po.partial_availability,
+        "clarification_requested": po.clarification_requested,
+        "mtc_pending": po.mtc_pending,
     }
     return state
 
 
 def update_status(po_number: str, new_status: str) -> None:
     sheets_update_status(po_number, new_status)
+
+def set_flag(po_number: str, flag_name: str, value: bool) -> None:
+    update_po_flag(po_number, flag_name, value)
 
 
 def compute_flags(state: Dict[str, Any]) -> Dict[str, Any]:

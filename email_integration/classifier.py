@@ -96,7 +96,7 @@ def resolve_entity(from_email: str, po_number: Optional[str]) -> Dict[str, Optio
     return {"entity_name": None, "role": role}
 
 
-def classify_email(from_email: str, subject: str, body: str) -> Dict[str, Any]:
+def classify_email(from_email: str, subject: str, body: str, attachments: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     po_number = extract_po_number(subject, body)
     ent = resolve_entity(from_email, po_number)
 
@@ -162,6 +162,8 @@ def classify_email(from_email: str, subject: str, body: str) -> Dict[str, Any]:
         heuristic.append("acknowledgment")
     if any(k in text for k in ["technical", "datasheet", "spec", "drawing"]):
         heuristic.append("technical_query")
+    if attachments and any(k in text for k in ["mtc", "material test certificate", "certificate of conformity", "c of c"]):
+        heuristic.append("mtc_provided")
     delivered_positive = re.search(
         r"\b(has\s+been\s+delivered|delivered\s+already|delivery\s+completed|delivered\s+today|delivered\s+on|goods\s+delivered|received\s+already|has\s+been\s+received|received\s+by)\b",
         text,
@@ -180,6 +182,14 @@ def classify_email(from_email: str, subject: str, body: str) -> Dict[str, Any]:
             merged.append(i)
     intents = merged
 
+    # If no clear intent is found, perform a deeper check for discrepancies
+    discrepancy_reason = None
+    if not intents and po_context:
+        discrepancy_check = _check_for_discrepancies(subject, body, po_context)
+        if discrepancy_check:
+            intents.append("clarification_needed")
+            discrepancy_reason = discrepancy_check.get("discrepancy")
+
     return {
         "from_email": from_email,
         "subject": subject,
@@ -189,6 +199,7 @@ def classify_email(from_email: str, subject: str, body: str) -> Dict[str, Any]:
         "role": ent.get("role"),
         "keywords": keywords,
         "intents": intents,
+        "discrepancy_reason": discrepancy_reason,
     }
 
 
@@ -204,8 +215,54 @@ ALLOWED_INTENTS = {
     "docs_missing",
     "extension_request",
     "third_party_issue",
+    "mtc_provided",
     "other",
 }
+
+
+def _check_for_discrepancies(subject: str, body: str, po_context: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    prompt = f"""
+    You are a procurement expert assistant. Your task is to identify discrepancies between a supplier's email and the official Purchase Order data.
+
+    Compare the PO data with the email content. If you find a clear contradiction or ambiguity regarding key details (like quantity, price, delivery date, item descriptions), describe the discrepancy in a single, concise sentence. If there are no discrepancies or the email is a simple acknowledgment or unrelated, return "NONE".
+
+    --- PO DATA ---
+    {po_context}
+
+    --- EMAIL ---
+    Subject: {subject}
+    Body: {body}
+
+    --- ANALYSIS ---
+    Return a STRICT JSON object with a single key "discrepancy" whose value is the discrepancy sentence or "NONE".
+
+    Example 1:
+    PO DATA: {{"status": "ISSUED", "line_items": [{{"item": "Model X-200 Sensor", "qty": 10}}]}}
+    EMAIL: "We have 5 of the Model X-200 sensors ready to ship."
+    JSON Response:
+    {{
+      "discrepancy": "The email mentions a quantity of 5, but the purchase order was for 10 units."
+    }}
+
+    Example 2:
+    PO DATA: {{"status": "ISSUED", "line_items": [{{"item": "Model X-200 Sensor", "qty": 10}}]}}
+    EMAIL: "Thank you for the order, we will process it shortly."
+    JSON Response:
+    {{
+      "discrepancy": "NONE"
+    }}
+    """
+    try:
+        raw = get_llm_generation(prompt).strip()
+        clean = raw.replace('```json', '').replace('```', '').strip()
+        import json
+        data = json.loads(clean)
+        discrepancy = data.get("discrepancy")
+        if discrepancy and discrepancy.strip().upper() != "NONE":
+            return {"discrepancy": discrepancy}
+        return None
+    except Exception:
+        return None
 
 
 def _extract_llm_intents(subject: str, body: str, po_context: Optional[Dict[str, Any]] = None) -> List[str]:

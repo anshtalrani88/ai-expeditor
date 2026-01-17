@@ -27,6 +27,19 @@ def _extract_json_string_value(text: str, key: str) -> str | None:
         i += 1
     return None
 
+def _format_line_items(line_items: list) -> str:
+    """Formats a list of line items into a string for email body."""
+    if not line_items:
+        return ""
+    
+    formatted_items = "\n\n**Order Details:**\n"
+    for item in line_items:
+        desc = item.get('description', 'N/A')
+        qty = item.get('quantity', 'N/A')
+        price = item.get('unit_price', 'N/A')
+        formatted_items += f"- {desc} (Quantity: {qty}, Unit Price: {price})\n"
+    return formatted_items
+
 def generate_email_content(scenario: str, data: dict) -> dict:
     """
     Generates a professional email subject and body using an LLM.
@@ -40,6 +53,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         A dictionary with 'subject' and 'body' keys, or None if generation fails.
     """
     prompt = "" # Initialize prompt
+    line_items_str = _format_line_items(data.get('line_items'))
 
     if scenario == "new_po_notification":
         prompt = f"""
@@ -49,6 +63,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         **Details:**
         - Purchase Order Number: {data.get('po_number')}
         - Vendor Name: {data.get('vendor_name')}
+        {line_items_str}
         
         **Instructions:**
         1. Create a clear subject line that includes the PO number.
@@ -68,6 +83,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         - Purchase Order Number: {data.get('po_number')}
         - Vendor Name: {data.get('vendor_name')}
         - Original Vendor Message: "{data.get('original_body')}"
+        {line_items_str}
 
         **Instructions:**
         1. Create a subject line that clearly states the PO is on hold and requires action.
@@ -86,6 +102,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         **Details:**
         - Purchase Order Number: {data.get('po_number')}
         - Vendor Name: {data.get('vendor_name')}
+        {line_items_str}
 
         **Instructions:**
         1. Create a subject line referencing the original PO number.
@@ -104,6 +121,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         - Purchase Order Number: {data.get('po_number')}
         - Vendor Name: {data.get('vendor_name')}
         - Vendor Query: "{data.get('original_body')}"
+        {line_items_str}
 
         **Instructions:**
         1. Create a subject line referencing the PO number and that this is a technical query.
@@ -122,6 +140,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         Details:
         - Purchase Order Number: {data.get('po_number')}
         - Buyer Name: {data.get('buyer_name')}
+        {line_items_str}
 
         Instructions:
         1. Subject should include the PO number and reference missing delivery date.
@@ -142,6 +161,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         - Accepted-items delivery date (if known): {data.get('accepted_delivery_date')}
         - Remaining items promised delivery date (if known): {data.get('remaining_delivery_date')}
         - Buyer's message: "{data.get('original_body')}"
+        {line_items_str}
 
         Instructions:
         1. Subject should include the PO number and reference buyer decision.
@@ -161,6 +181,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         - Purchase Order Number: {data.get('po_number')}
         - Supplier Name: {data.get('supplier_name')}
         - Supplier message: "{data.get('original_body')}"
+        {line_items_str}
 
         Instructions:
         1. Subject should include the PO number and request remaining delivery date.
@@ -179,6 +200,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         - Supplier Name: {data.get('supplier_name')}
         - New Promised Delivery Date (YYYY-MM-DD): {data.get('promised_delivery_date')}
         - Supplier's message: "{data.get('original_body')}"
+        {line_items_str}
 
         Instructions:
         1. Subject should include the PO number and indicate updated delivery date.
@@ -195,6 +217,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         Details:
         - Purchase Order Number: {data.get('po_number')}
         - Supplier Name: {data.get('supplier_name')}
+        {line_items_str}
 
         Instructions:
         1. Subject should include the PO number and indicate overdue delivery.
@@ -214,6 +237,7 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         - Accepted-items delivery date (if provided): {data.get('accepted_delivery_date')}
         - Remaining items promised delivery date (if provided): {data.get('remaining_delivery_date')}
         - Extracted context (if any) from supplier's message: "{data.get('original_body')}"
+        {line_items_str}
 
         Instructions:
         1. Subject should include the PO number and indicate partial availability.
@@ -225,6 +249,43 @@ def generate_email_content(scenario: str, data: dict) -> dict:
 
         Return a single JSON object: {{"subject": "...", "body": "..."}}
         """
+    elif scenario == "request_clarification":
+        prompt = f"""
+        Generate a professional and concise email to a supplier requesting clarification on a purchase order.
+        The tone should be polite and specific.
+        
+        **Details:**
+        - Purchase Order Number: {{data.get('po_number')}}
+        - Vendor Name: {{data.get('vendor_name')}}
+        - Point of Confusion: "{{data.get('discrepancy_reason')}}"
+        {{line_items_str}}
+        
+        **Instructions:**
+        1. Create a clear subject line that includes the PO number and asks for clarification.
+        2. Write a short email body that states the point of confusion we have identified.
+        3. Politely ask the supplier to provide more information to resolve the discrepancy.
+        4. Sign off as 'Denicx Automation'.
+        
+        Return the result as a single, valid JSON object with two keys: "subject" and "body".
+        """
+    elif scenario == "request_mtc":
+        prompt = f"""
+        Generate a professional and concise email to a supplier requesting the Material Test Certificate (MTC) for a purchase order.
+        The tone should be polite and clear.
+        
+        **Details:**
+        - Purchase Order Number: {data.get('po_number')}
+        - Vendor Name: {data.get('vendor_name')}
+        {line_items_str}
+        
+        **Instructions:**
+        1. Create a clear subject line that includes the PO number and mentions the MTC request.
+        2. Write a short email body politely reminding the supplier that an MTC is required for this order.
+        3. Ask them to provide it at their earliest convenience.
+        4. Sign off as 'Denicx Automation'.
+        
+        Return the result as a single, valid JSON object with two keys: "subject" and "body".
+        """
     elif scenario == "vendor_no_response_followup":
         prompt = f"""
         Generate a concise follow-up email to the supplier when no response has been received.
@@ -233,10 +294,11 @@ def generate_email_content(scenario: str, data: dict) -> dict:
         Details:
         - Purchase Order Number: {data.get('po_number')}
         - Supplier Name: {data.get('supplier_name')}
+        {line_items_str}
 
         Instructions:
-        1. Subject should include the PO number and indicate immediate status update required.
-        2. Body should state: "No response received. Please provide immediate status update today. Delay may lead to contractual implications." (You can rephrase slightly but keep meaning.)
+        1. Subject should include the PO number and indicate a follow-up.
+        2. Body should politely state that we are following up on our previous query and are awaiting a response.
         3. Keep it short and sign off as 'Denicx Automation'.
 
         Return a single JSON object: {{"subject": "...", "body": "..."}}

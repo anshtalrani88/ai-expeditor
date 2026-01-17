@@ -1,6 +1,9 @@
+from dotenv import load_dotenv
+load_dotenv() # Load environment variables from .env file
+
 from email_integration.email_receiver import fetch_and_process_emails
 from orchestration.main_handler import triage_email
-from orchestration.processor import process_system_check
+from orchestration.processor import process_system_check, run_eta_follow_ups, run_mtc_follow_ups
 from g_sheets.sheets_handler import list_active_po_numbers
 
 _LAST_SYSTEM_CHECK_TS = 0.0
@@ -18,6 +21,7 @@ def main_workflow_loop():
         print("No new emails to process.")
     else:
         for email_data in all_new_emails:
+            
             try:
                 triage_email(email_data)
             except Exception as e:
@@ -28,6 +32,8 @@ def main_workflow_loop():
     if (now_ts - _LAST_SYSTEM_CHECK_TS) >= 60.0:
         _LAST_SYSTEM_CHECK_TS = now_ts
         try:
+            run_eta_follow_ups()
+            run_mtc_follow_ups()
             active_pos = list_active_po_numbers()
             for po in active_pos:
                 process_system_check(po)

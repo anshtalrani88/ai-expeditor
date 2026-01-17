@@ -1,81 +1,120 @@
 {
   "rules": [
     {
-      "name": "Credit Hold: escalate to finance and mark hold",
+      "name": "Credit Hold: escalate to finance and set flag",
       "when": {
         "from_role": ["supplier"],
-        "intent_in": ["credit_hold"]
+        "intent_in": ["credit_hold"],
+        "payment_hold": false
       },
       "then": [
         {"action": "send_email", "to": "finance", "scenario": "credit_hold_alert"},
-        {"action": "update_status", "value": "PAYMENT_HOLD"}
+        {"action": "set_flag", "flag": "payment_hold", "value": true}
       ]
     },
     {
-      "name": "Missing delivery date → ask buyer",
+      "name": "Missing delivery date → ask buyer and set flag",
       "when": {
-        "status_in": ["ISSUED", "AWAITING_ACKNOWLEDGMENT"],
-        "delivery_date_missing": true
+        "status_is": "ISSUED",
+        "delivery_date_missing": true,
+        "needs_info": false
       },
       "then": [
         {"action": "send_email", "to": "buyer", "scenario": "missing_delivery_date_request"},
-        {"action": "update_status", "value": "NEEDS_INFO"}
+        {"action": "set_flag", "flag": "needs_info", "value": true}
       ]
     },
     {
-      "name": "Acknowledgment reminder after 24h from issuance",
+      "name": "Acknowledgment reminder after 24h",
       "when": {
-        "status_in": ["ISSUED", "AWAITING_ACKNOWLEDGMENT"],
+        "status_is": "ISSUED",
+        "awaiting_acknowledgment": false,
         "sla_hours_over": 24
       },
       "then": [
-        {"action": "send_email", "to": "supplier", "scenario": "new_po_notification"},
-        {"action": "update_status", "value": "AWAITING_ACKNOWLEDGMENT"}
+        {"action": "send_email", "to": "supplier", "scenario": "acknowledgment_reminder"},
+        {"action": "set_flag", "flag": "awaiting_acknowledgment", "value": true}
       ]
     },
     {
       "name": "Lapsed delivery follow-up",
       "when": {
         "from_role": ["system"],
-        "status_not_in": ["DELIVERED", "CLOSED"],
-        "delivery_date_past": true
+        "status_not_in": ["DELIVERED", "CLOSED", "CANCELLED"],
+        "delivery_date_past": true,
+        "overdue": false
       },
       "then": [
         {"action": "send_email", "to": "supplier", "scenario": "delivery_delay_followup"},
-        {"action": "update_status", "value": "OVERDUE"}
+        {"action": "set_flag", "flag": "overdue", "value": true}
       ]
     },
     {
-      "name": "Supplier confirms delivery completed  mark delivered",
+      "name": "Supplier confirms delivery -> mark delivered",
       "when": {
         "from_role": ["supplier"],
         "intent_in": ["delivery_completed"]
       },
       "then": [
-        {"action": "update_status", "value": "DELIVERED"}
+        {"action": "update_status", "value": "DELIVERED"},
+        {"action": "set_flag", "flag": "overdue", "value": false}
       ]
     },
     {
-      "name": "Vendor partial availability  notify buyer",
+      "name": "Supplier confirms acknowledgment -> update status",
       "when": {
         "from_role": ["supplier"],
-        "intent_in": ["partial_availability"]
+        "intent_in": ["acknowledgment"]
+      },
+      "then": [
+        {"action": "update_status", "value": "ACKNOWLEDGED"},
+        {"action": "set_flag", "flag": "awaiting_acknowledgment", "value": false}
+      ]
+    },
+    {
+      "name": "Vendor partial availability -> notify buyer and set flag",
+      "when": {
+        "from_role": ["supplier"],
+        "intent_in": ["partial_availability"],
+        "partial_availability": false
       },
       "then": [
         {"action": "send_email", "to": "buyer", "scenario": "partial_quantity_confirmation"},
-        {"action": "update_status", "value": "PARTIAL_AVAILABILITY"}
+        {"action": "set_flag", "flag": "partial_availability", "value": true}
       ]
     },
     {
-      "name": "No supplier response after outbound → follow up",
+      "name": "ETA Lapsed: follow up with supplier",
       "when": {
         "from_role": ["system"],
-        "status_not_in": ["DELIVERED", "CLOSED", "COMPLETED", "CANCELLED"],
-        "supplier_silent_over_seconds_over": 300,
-        "last_outbound_to_supplier_is_no_response_followup": false
+        "keyword_in": ["eta_lapsed"]
       },
       "then": [
         {"action": "send_email", "to": "supplier", "scenario": "vendor_no_response_followup"}
+      ]
+    },
+    {
+      "name": "Discrepancy detected -> request clarification and set flag",
+      "when": {
+        "from_role": ["supplier"],
+        "intent_in": ["clarification_needed"],
+        "clarification_requested": false
+      },
+      "then": [
+        {"action": "send_email", "to": "supplier", "scenario": "request_clarification"},
+        {"action": "set_flag", "flag": "clarification_requested", "value": true}
+      ]
+    },
+    {
+      "name": "MTC Missing: request from supplier and set flag",
+      "when": {
+        "from_role": ["system"],
+        "keyword_in": ["mtc_missing"],
+        "mtc_pending": false
+      },
+      "then": [
+        {"action": "send_email", "to": "supplier", "scenario": "request_mtc"},
+        {"action": "set_flag", "flag": "mtc_pending", "value": true}
       ]
     },
     {

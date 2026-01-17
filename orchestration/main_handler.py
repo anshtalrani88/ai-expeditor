@@ -37,6 +37,9 @@ def handle_new_document(email_data):
                     subject=email_data.get('subject', ''),
                     body=email_data.get('body', ''),
                     po_number_hint=po_data['po_number'],
+                    message_id=email_data.get('message_id'),
+                    references=email_data.get('references'),
+                    date=email_data.get('date')
                 )
             except Exception as e:
                 print(f"WARNING: Follow-up rule evaluation failed for {po_data['po_number']}: {e}")
@@ -109,6 +112,9 @@ def handle_follow_up(email_data):
                 subject=email_data.get('subject', ''),
                 body=email_data.get('body', ''),
                 po_number_hint=po_number,
+                message_id=email_data.get('message_id'),
+                references=email_data.get('references'),
+                date=email_data.get('date')
             )
         except Exception as e:
             print(f"WARNING: Follow-up rule evaluation failed for {po_number}: {e}")
@@ -132,6 +138,9 @@ def handle_follow_up(email_data):
                     subject=email_data.get('subject', ''),
                     body=email_data.get('body', ''),
                     po_number_hint=best_match_po,
+                    message_id=email_data.get('message_id'),
+                    references=email_data.get('references'),
+                    date=email_data.get('date')
                 )
             except Exception as e:
                 print(f"WARNING: Follow-up rule evaluation failed for {best_match_po}: {e}")

@@ -36,6 +36,7 @@ def parse_po_pdf(pdf_path: str):
         - supplier_name (string)
         - expected_delivery_date (string, in YYYY-MM-DD format)
         - line_items (an array of objects, each with 'description', 'quantity' (integer), and 'unit_price' (string))
+        - mtc_needed (boolean, true if a Material Test Certificate or MTC is mentioned as required, otherwise false)
 
         **Purchase Order Document:**
         ---

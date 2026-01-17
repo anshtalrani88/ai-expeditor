@@ -5,7 +5,7 @@ import requests
 # --- IMPORTANT ---
 # Please provide your Hugging Face API token here.
 # You can get one from https://huggingface.co/settings/tokens
-HUGGINGFACE_API_TOKEN = "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"
+HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACE_API_TOKEN")
 
 # Initialize the Inference Client for Llama 3.3
 client = InferenceClient(token=HUGGINGFACE_API_TOKEN)

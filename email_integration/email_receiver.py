@@ -46,6 +46,10 @@ def fetch_and_process_emails():
                 "from": email.utils.parseaddr(msg.get("From"))[1],
                 "to": email.utils.parseaddr(msg.get("To"))[1],
                 "subject": subject,
+                "date": email.utils.parsedate_to_datetime(msg.get("Date")),
+                "message_id": msg.get("Message-ID"),
+                "in_reply_to": msg.get("In-Reply-To"),
+                "references": msg.get("References"),
                 "body": "",
                 "pdf_path": None
             }

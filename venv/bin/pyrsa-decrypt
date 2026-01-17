@@ -1,6 +1,4 @@
-#!/bin/sh
-'''exec' "/home/ansh/Desktop/Service/AI Expeditor/Email-Automation/venv/bin/python3" "$0" "$@"
-' '''
+#!/Users/sarthakjain/Email_Automation_Final/ai-expeditor/venv/bin/python3.13
 # -*- coding: utf-8 -*-
 import re
 import sys

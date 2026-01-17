@@ -94,7 +94,14 @@ def setup_spreadsheet():
             _with_backoff(ws.append_row, header)
         return ws
 
-    po_ws = _get_or_create_worksheet(sheet, PO_SHEET_NAME, ['PO Number', 'Buyer', 'Vendor', 'Order Date', 'Expected Delivery', 'Status', 'Line Items', 'Buyer Email', 'Vendor Email', 'Original Sender'])
+    po_header = [
+        'PO Number', 'Buyer', 'Vendor', 'Order Date', 'Expected Delivery', 'Status',
+        'Line Items', 'Buyer Email', 'Vendor Email', 'Original Sender',
+        'Accepted Delivery Date', 'Remaining Delivery Date', 'MTC Needed', 'MTC Received', 'ETA',
+        'Payment Hold', 'Needs Info', 'Awaiting Acknowledgment', 'Overdue',
+        'Partial Availability', 'Clarification Requested', 'MTC Pending'
+    ]
+    po_ws = _get_or_create_worksheet(sheet, PO_SHEET_NAME, po_header)
     entities_ws = _get_or_create_worksheet(sheet, ENTITIES_SHEET_NAME, ['Entity Name', 'Email', 'Role'])
     history_ws = _get_or_create_worksheet(sheet, HISTORY_SHEET_NAME, ['PO Number', 'Timestamp', 'From', 'Subject', 'Body'])
 
@@ -166,6 +173,16 @@ class PurchaseOrder:
         self.remaining_delivery_date = kwargs.get('remaining_delivery_date')
         self.line_items = kwargs.get('line_items', [])
         self.original_sender = kwargs.get('original_sender')
+        self.mtc_needed = kwargs.get('mtc_needed')
+        self.mtc_received = kwargs.get('mtc_received')
+        self.eta = kwargs.get('eta')
+        self.payment_hold = kwargs.get('payment_hold', False)
+        self.needs_info = kwargs.get('needs_info', False)
+        self.awaiting_acknowledgment = kwargs.get('awaiting_acknowledgment', False)
+        self.overdue = kwargs.get('overdue', False)
+        self.partial_availability = kwargs.get('partial_availability', False)
+        self.clarification_requested = kwargs.get('clarification_requested', False)
+        self.mtc_pending = kwargs.get('mtc_pending', False)
 
 class Entity:
     def __init__(self, name, email, role):
@@ -213,6 +230,10 @@ def create_po_bucket(po_data: dict, initial_email: dict):
         buyer_email,
         '',
         '',
+        'TRUE' if po_data.get('mtc_needed') else 'FALSE',
+        '',  # MTC Received
+        '',  # ETA
+        'FALSE', 'FALSE', 'FALSE', 'FALSE', 'FALSE', 'FALSE', 'FALSE'  # Flags
     ]
     _with_backoff(po_ws.append_row, po_row)
     _invalidate_caches()
@@ -297,12 +318,26 @@ def get_purchase_order(po_number: str):
         except Exception:
             remaining_delivery_date = None
 
-        line_items = []
-        try:
-            if len(row) > 6 and row[6]:
-                line_items = json.loads(row[6])
-        except Exception:
-            line_items = []
+        mtc_needed = (row[12] if len(row) > 12 else '').upper() == 'TRUE'
+        line_items = json.loads(row[6]) if len(row) > 6 and row[6] else []
+        buyer_email = row[7] if len(row) > 7 else ""
+        vendor_email = row[8] if len(row) > 8 else ""
+        original_sender = row[9] if len(row) > 9 else None
+        accepted_delivery_date = datetime.strptime(row[10], '%Y-%m-%d') if len(row) > 10 and row[10] else None
+        remaining_delivery_date = datetime.strptime(row[11], '%Y-%m-%d') if len(row) > 11 and row[11] else None
+        mtc_needed = (row[12] if len(row) > 12 else '').upper() == 'TRUE'
+        mtc_received = (row[13] if len(row) > 13 else '').upper() == 'TRUE'
+        eta = datetime.strptime(row[14], '%Y-%m-%d %H:%M:%S') if len(row) > 14 and row[14] else None
+
+        payment_hold = (row[15] if len(row) > 15 else '').upper() == 'TRUE'
+        needs_info = (row[16] if len(row) > 16 else '').upper() == 'TRUE'
+        awaiting_acknowledgment = (row[17] if len(row) > 17 else '').upper() == 'TRUE'
+        overdue = (row[18] if len(row) > 18 else '').upper() == 'TRUE'
+        partial_availability = (row[19] if len(row) > 19 else '').upper() == 'TRUE'
+        clarification_requested = (row[20] if len(row) > 20 else '').upper() == 'TRUE'
+        mtc_pending = (row[21] if len(row) > 21 else '').upper() == 'TRUE'
+
+        eta = None
 
         return PurchaseOrder(
             po_number=row[0],
@@ -315,6 +350,16 @@ def get_purchase_order(po_number: str):
             remaining_delivery_date=remaining_delivery_date,
             line_items=line_items,
             original_sender=original_sender,
+            mtc_needed=mtc_needed,
+            mtc_received=mtc_received,
+            eta=eta,
+            payment_hold=payment_hold,
+            needs_info=needs_info,
+            awaiting_acknowledgment=awaiting_acknowledgment,
+            overdue=overdue,
+            partial_availability=partial_availability,
+            clarification_requested=clarification_requested,
+            mtc_pending=mtc_pending,
         )
     return None
 
@@ -346,6 +391,62 @@ def update_po_partial_delivery_dates(
         _with_backoff(po_ws.update_cell, cell.row, 12, value)  # Remaining Delivery Date
 
     _invalidate_caches()
+
+
+def update_po_mtc_received(po_number: str, received: bool):
+    _, po_ws, _, _ = setup_spreadsheet()
+    if not po_ws:
+        return
+    cell = _with_backoff(po_ws.find, po_number, in_column=1)
+    if not cell:
+        return
+
+    value = 'TRUE' if received else 'FALSE'
+    _with_backoff(po_ws.update_cell, cell.row, 14, value)  # MTC Received is column 14
+    _invalidate_caches()
+
+
+
+FLAG_COLUMN_MAP = {
+    'payment_hold': 16,
+    'needs_info': 17,
+    'awaiting_acknowledgment': 18,
+    'overdue': 19,
+    'partial_availability': 20,
+    'clarification_requested': 21,
+    'mtc_pending': 22,
+}
+
+def update_po_flag(po_number: str, flag_name: str, value: bool):
+    """Sets or clears a boolean flag for a PO."""
+    if flag_name not in FLAG_COLUMN_MAP:
+        print(f"WARNING: Unknown flag '{flag_name}'")
+        return
+
+    _, po_ws, _, _ = setup_spreadsheet()
+    if not po_ws:
+        return
+    cell = _with_backoff(po_ws.find, po_number, in_column=1)
+    if not cell:
+        return
+
+    column_index = FLAG_COLUMN_MAP[flag_name]
+    flag_value = 'TRUE' if value else 'FALSE'
+    _with_backoff(po_ws.update_cell, cell.row, column_index, flag_value)
+    _invalidate_caches()
+
+def update_po_eta(po_number: str, eta: datetime):
+    _, po_ws, _, _ = setup_spreadsheet()
+    if not po_ws:
+        return
+    cell = _with_backoff(po_ws.find, po_number, in_column=1)
+    if not cell:
+        return
+
+    value = eta.strftime('%Y-%m-%d %H:%M:%S') if eta else ''
+    _with_backoff(po_ws.update_cell, cell.row, 16, value)  # ETA is column 16
+    _invalidate_caches()
+
 
 def get_entity_by_email(ws, email):
     rows = _get_entities_rows_cached(ws)
@@ -439,6 +540,55 @@ def get_conversation_histories(po_numbers: list[str]) -> dict[str, str]:
         histories[po] += f"From: {from_addr}\nSubject: {subject}\n{body}\n---\n"
     return histories
 
+def list_pos_needing_mtc() -> list[str]:
+    """Returns PO numbers that need an MTC and have not received it yet."""
+    _, po_ws, _, _ = setup_spreadsheet()
+    if not po_ws:
+        return []
+
+    terminal = {"DELIVERED", "CLOSED", "COMPLETED", "CANCELLED"}
+    rows = _get_po_rows_cached(po_ws)
+    out: list[str] = []
+    for i, row in enumerate(rows):
+        if i == 0:
+            continue
+        if not row or not row[0]:
+            continue
+        
+        po_number = row[0].strip()
+        status = (row[5] if len(row) > 5 else "").strip().upper()
+        mtc_needed = (row[12] if len(row) > 12 else '').upper() == 'TRUE'
+        mtc_received = (row[13] if len(row) > 13 else '').upper() == 'TRUE'
+
+        if mtc_needed and not mtc_received and status not in terminal:
+            out.append(po_number)
+            
+    return out
+
+def list_pos_with_eta() -> list[str]:
+    """Returns PO numbers that have an ETA set and are not in a terminal status."""
+    _, po_ws, _, _ = setup_spreadsheet()
+    if not po_ws:
+        return []
+
+    terminal = {"DELIVERED", "CLOSED", "COMPLETED", "CANCELLED"}
+    rows = _get_po_rows_cached(po_ws)
+    out: list[str] = []
+    for i, row in enumerate(rows):
+        if i == 0:
+            continue
+        if not row or not row[0]:
+            continue
+        
+        po_number = row[0].strip()
+        status = (row[5] if len(row) > 5 else "").strip().upper()
+        eta = (row[12] if len(row) > 12 else "").strip()
+
+        if eta and status not in terminal:
+            out.append(po_number)
+            
+    return out
+
 def update_po_status(po_number: str, status: str):
     _, po_ws, _, _ = setup_spreadsheet()
     if not po_ws: return
@@ -487,7 +637,13 @@ def clear_all_data():
     if not client:
         return
 
-    po_header = ['PO Number', 'Buyer', 'Vendor', 'Order Date', 'Expected Delivery', 'Status', 'Line Items', 'Buyer Email', 'Vendor Email', 'Original Sender', 'Accepted Delivery Date', 'Remaining Delivery Date']
+    po_header = [
+        'PO Number', 'Buyer', 'Vendor', 'Order Date', 'Expected Delivery', 'Status',
+        'Line Items', 'Buyer Email', 'Vendor Email', 'Original Sender',
+        'Accepted Delivery Date', 'Remaining Delivery Date', 'MTC Needed', 'MTC Received', 'ETA',
+        'Payment Hold', 'Needs Info', 'Awaiting Acknowledgment', 'Overdue',
+        'Partial Availability', 'Clarification Requested', 'MTC Pending'
+    ]
     entities_header = ['Entity Name', 'Email', 'Role']
     history_header = ['PO Number', 'Timestamp', 'From', 'Subject', 'Body']
     threads_header = [

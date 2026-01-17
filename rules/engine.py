@@ -42,6 +42,13 @@ def _match_when(when: Dict[str, Any], email: Dict[str, Any], state: Dict[str, An
     if (email.get("role") == "system") and ("from_role" not in when):
         return False
 
+    known_operators = {
+        "from_role", "entity", "status_in", "status_not_in", "status_is",
+        "delivery_date_past", "delivery_date_missing", "sla_hours_over",
+        "supplier_silent_over_seconds_over", "last_outbound_to_supplier_is_no_response_followup",
+        "keywords_any", "intent_in",
+    }
+
     # from_role
     if "from_role" in when:
         if not _in_list(email.get("role"), when["from_role"]):
@@ -90,13 +97,11 @@ def _match_when(when: Dict[str, Any], email: Dict[str, Any], state: Dict[str, An
 
     # keywords_any (search in subject+body or keywords list)
     if "keywords_any" in when:
-        # Email dict provides extracted keywords already; prefer exact matches
         kws = set(email.get("keywords", []))
         needed = set([str(x).lower() for x in when["keywords_any"]])
         if kws.intersection(needed):
             pass
         else:
-            # Fallback to full-text contains
             text = f"{email.get('subject','')}\n{email.get('body','')}"
             if not _kw_any(list(needed), text):
                 return False
@@ -106,6 +111,14 @@ def _match_when(when: Dict[str, Any], email: Dict[str, Any], state: Dict[str, An
         intents = set([str(x).lower() for x in email.get("intents", [])])
         needed = set([str(x).lower() for x in when["intent_in"]])
         if not intents.intersection(needed):
+            return False
+
+    # Boolean flags from the state object
+    for key, expected_value in when.items():
+        if key in known_operators:
+            continue
+        actual_value = state.get(key, False)
+        if bool(actual_value) != bool(expected_value):
             return False
 
     return True
@@ -130,6 +143,5 @@ def evaluate(email: Dict[str, Any], state: Dict[str, Any]) -> List[Dict[str, Any
                 act_copy = dict(act)
                 act_copy["__rule_name"] = rule.get("name")
                 actions.append(act_copy)
-            break  # first-match for POC
 
     return actions
